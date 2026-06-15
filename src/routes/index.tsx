@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { searchGames, recommendGames, type RawgGame } from "@/lib/rawg.functions";
+import { recommendGames, type Recommendation } from "@/lib/recommend.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Gamepad2, Search, Sparkles, Star, X, ArrowRight, ArrowLeft, RotateCcw, ExternalLink, Plus } from "lucide-react";
+import { Gamepad2, Sparkles, X, ArrowRight, ArrowLeft, RotateCcw, ExternalLink, Plus, Clock, Trophy } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -115,10 +115,10 @@ function App() {
   const [phase, setPhase] = useState<"intro" | "quiz" | "games" | "loading" | "results">("intro");
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
-  const [seedGames, setSeedGames] = useState<RawgGame[]>([]);
-  const [results, setResults] = useState<RawgGame[]>([]);
-  const [excludeIds, setExcludeIds] = useState<number[]>([]);
-  const [replacing, setReplacing] = useState<number | null>(null);
+  const [favoriteGames, setFavoriteGames] = useState<string[]>([]);
+  const [results, setResults] = useState<Recommendation[]>([]);
+  const [excludeNames, setExcludeNames] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const recommend = useServerFn(recommendGames);
 
@@ -139,9 +139,10 @@ function App() {
     });
   }
 
-  async function runRecommend(extraExclude: number[] = []) {
+  async function runRecommend(extraExclude: string[] = []) {
     setPhase("loading");
-    const ex = [...excludeIds, ...extraExclude];
+    setError(null);
+    const ex = [...excludeNames, ...extraExclude];
     const r = await recommend({
       data: {
         genres: answers.genres ?? [],
@@ -150,47 +151,29 @@ function App() {
         playStyle: answers.playStyle?.[0] ?? "",
         mood: answers.mood?.[0] ?? "",
         visual: answers.visual?.[0] ?? "",
-        seedGameIds: seedGames.map((g) => g.id),
-        excludeIds: ex,
+        favoriteGames,
+        exclude: ex,
       },
     });
-    setExcludeIds([...ex, ...r.results.map((g) => g.id)]);
+    setExcludeNames([...ex, ...r.results.map((g) => g.nome)]);
     setResults(r.results);
+    setError(r.error ?? null);
     setPhase("results");
   }
 
-  async function replaceOne(idx: number, gameId: number) {
-    setReplacing(idx);
-    const ex = [...excludeIds, gameId];
-    const r = await recommend({
-      data: {
-        genres: answers.genres ?? [],
-        platforms: answers.platforms ?? [],
-        sessionLength: answers.sessionLength?.[0] ?? "",
-        playStyle: answers.playStyle?.[0] ?? "",
-        mood: answers.mood?.[0] ?? "",
-        visual: answers.visual?.[0] ?? "",
-        seedGameIds: seedGames.map((g) => g.id),
-        excludeIds: ex,
-      },
-    });
-    const next = r.results.find((g) => !results.some((x) => x.id === g.id));
-    if (next) {
-      setResults((prev) => prev.map((g, i) => (i === idx ? next : g)));
-      setExcludeIds([...ex, next.id]);
-    } else {
-      setExcludeIds(ex);
-    }
-    setReplacing(null);
+  function dismissOne(idx: number, name: string) {
+    setResults((prev) => prev.filter((_, i) => i !== idx));
+    setExcludeNames((prev) => [...prev, name]);
   }
 
   function reset() {
     setPhase("intro");
     setStep(0);
     setAnswers({});
-    setSeedGames([]);
+    setFavoriteGames([]);
     setResults([]);
-    setExcludeIds([]);
+    setExcludeNames([]);
+    setError(null);
   }
 
   return (
@@ -228,7 +211,7 @@ function App() {
                 if (step < totalSteps - 1) setStep(step + 1);
                 else setPhase("games");
               }}
-              nextLabel={step === totalSteps - 1 ? "Próximo" : "Próximo"}
+              nextLabel="Próximo"
             />
           </div>
         )}
@@ -236,10 +219,7 @@ function App() {
         {phase === "games" && (
           <div className="animate-fade-up">
             <ProgressBar value={progress} step={totalSteps + 1} total={totalSteps + 1} />
-            <GamesStep
-              seedGames={seedGames}
-              setSeedGames={setSeedGames}
-            />
+            <GamesStep favoriteGames={favoriteGames} setFavoriteGames={setFavoriteGames} />
             <NavButtons
               canBack
               canNext
@@ -256,15 +236,15 @@ function App() {
         {phase === "results" && (
           <Results
             games={results}
-            onReplace={replaceOne}
-            replacing={replacing}
+            error={error}
+            onDismiss={dismissOne}
             onAgain={() => runRecommend()}
           />
         )}
       </main>
 
       <footer className="text-center text-xs text-muted-foreground py-6">
-        Dados de jogos via RAWG.io
+        Recomendações geradas por IA
       </footer>
     </div>
   );
@@ -275,14 +255,14 @@ function Intro({ onStart }: { onStart: () => void }) {
     <div className="text-center py-16 md:py-24 animate-fade-up">
       <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full card-glow text-xs font-semibold text-muted-foreground mb-8">
         <Sparkles className="w-3.5 h-3.5 text-primary" />
-        Quiz inteligente · Powered by RAWG
+        Quiz inteligente · Powered by Claude
       </div>
       <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-[1.05]">
         Descubra o seu <br />
         <span className="text-gradient">próximo jogo favorito</span>
       </h1>
       <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-10">
-        Responda 6 perguntas rápidas, conte o que você já jogou, e a gente entrega 5 recomendações sob medida.
+        Responda 6 perguntas rápidas, conte o que você já jogou, e a IA entrega 5 recomendações sob medida.
       </p>
       <Button size="lg" onClick={onStart} className="btn-hero text-base px-8 h-14 rounded-full font-bold">
         Começar quiz
@@ -364,100 +344,58 @@ function NavButtons({
 }
 
 function GamesStep({
-  seedGames,
-  setSeedGames,
+  favoriteGames,
+  setFavoriteGames,
 }: {
-  seedGames: RawgGame[];
-  setSeedGames: (g: RawgGame[]) => void;
+  favoriteGames: string[];
+  setFavoriteGames: (g: string[]) => void;
 }) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<RawgGame[]>([]);
-  const [searching, setSearching] = useState(false);
-  const search = useServerFn(searchGames);
+  const [input, setInput] = useState("");
 
-  useEffect(() => {
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
-    setSearching(true);
-    const t = setTimeout(async () => {
-      const r = await search({ data: { q } });
-      setResults(r.results);
-      setSearching(false);
-    }, 350);
-    return () => clearTimeout(t);
-  }, [q, search]);
-
-  function add(g: RawgGame) {
-    if (seedGames.some((x) => x.id === g.id)) return;
-    setSeedGames([...seedGames, g]);
-    setQ("");
-    setResults([]);
+  function add() {
+    const name = input.trim();
+    if (!name) return;
+    if (favoriteGames.some((g) => g.toLowerCase() === name.toLowerCase())) return;
+    setFavoriteGames([...favoriteGames, name]);
+    setInput("");
   }
-  function remove(id: number) {
-    setSeedGames(seedGames.filter((g) => g.id !== id));
+  function remove(name: string) {
+    setFavoriteGames(favoriteGames.filter((g) => g !== name));
   }
 
   return (
     <div className="animate-fade-up">
       <h2 className="text-3xl md:text-4xl font-bold mb-2">Quais jogos você já amou?</h2>
       <p className="text-muted-foreground mb-8">
-        Adicione alguns favoritos para refinar as recomendações. <span className="opacity-70">(opcional)</span>
+        Digite alguns favoritos para refinar as recomendações. <span className="opacity-70">(opcional)</span>
       </p>
 
-      <div className="relative max-w-xl">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <div className="flex gap-2 max-w-xl">
         <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar um jogo, ex: Hollow Knight..."
-          className="pl-11 h-12 bg-input border-border"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Ex: Hollow Knight"
+          className="h-12 bg-input border-border"
         />
-        {results.length > 0 && (
-          <div className="absolute z-20 mt-2 w-full card-glow rounded-xl overflow-hidden">
-            {results.map((g) => (
-              <button
-                key={g.id}
-                onClick={() => add(g)}
-                className="w-full flex items-center gap-3 p-3 hover:bg-secondary text-left transition"
-              >
-                {g.background_image ? (
-                  <img src={g.background_image} alt={g.name} className="w-12 h-12 rounded-md object-cover" />
-                ) : (
-                  <div className="w-12 h-12 rounded-md bg-secondary" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{g.name}</div>
-                  <div className="text-xs text-muted-foreground">{g.released?.slice(0, 4)}</div>
-                </div>
-                <Plus className="w-4 h-4 text-primary" />
-              </button>
-            ))}
-          </div>
-        )}
-        {searching && q.trim() && results.length === 0 && (
-          <div className="absolute mt-2 text-xs text-muted-foreground">Buscando...</div>
-        )}
+        <Button onClick={add} disabled={!input.trim()} className="btn-hero h-12 px-5 rounded-xl font-bold">
+          <Plus className="w-4 h-4 mr-1" /> Adicionar
+        </Button>
       </div>
 
-      {seedGames.length > 0 && (
-        <div className="mt-10">
-          <div className="text-sm font-semibold text-muted-foreground mb-3">Seus jogos ({seedGames.length})</div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {seedGames.map((g) => (
-              <div key={g.id} className="card-glow rounded-xl overflow-hidden relative group">
-                {g.background_image && (
-                  <img src={g.background_image} alt={g.name} className="w-full aspect-video object-cover" />
-                )}
-                <div className="p-3">
-                  <div className="font-semibold text-sm truncate">{g.name}</div>
-                </div>
-                <button
-                  onClick={() => remove(g.id)}
-                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-background/80 backdrop-blur flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition"
-                  aria-label="Remover"
-                >
+      {favoriteGames.length > 0 && (
+        <div className="mt-8">
+          <div className="text-sm font-semibold text-muted-foreground mb-3">Seus jogos ({favoriteGames.length})</div>
+          <div className="flex flex-wrap gap-2">
+            {favoriteGames.map((g) => (
+              <div key={g} className="chip chip-active">
+                {g}
+                <button onClick={() => remove(g)} aria-label="Remover" className="ml-1 opacity-80 hover:opacity-100">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -476,28 +414,37 @@ function Loading() {
         <Sparkles className="w-7 h-7" />
       </div>
       <h2 className="text-2xl font-bold mb-2">Analisando seu perfil...</h2>
-      <p className="text-muted-foreground">Encontrando os jogos perfeitos pra você</p>
+      <p className="text-muted-foreground">A IA está escolhendo seus jogos</p>
     </div>
   );
 }
 
 function Results({
   games,
-  onReplace,
-  replacing,
+  error,
+  onDismiss,
   onAgain,
 }: {
-  games: RawgGame[];
-  onReplace: (idx: number, id: number) => void;
-  replacing: number | null;
+  games: Recommendation[];
+  error: string | null;
+  onDismiss: (idx: number, name: string) => void;
   onAgain: () => void;
 }) {
+  if (error && games.length === 0) {
+    return (
+      <div className="py-20 text-center animate-fade-up">
+        <h2 className="text-2xl font-bold mb-2">Ops! Algo deu errado</h2>
+        <p className="text-muted-foreground mb-6">{error}</p>
+        <Button onClick={onAgain} className="btn-hero rounded-full">Tentar novamente</Button>
+      </div>
+    );
+  }
   if (games.length === 0) {
     return (
       <div className="py-20 text-center animate-fade-up">
-        <h2 className="text-2xl font-bold mb-2">Nada encontrado 😕</h2>
-        <p className="text-muted-foreground mb-6">Tente afrouxar alguns filtros.</p>
-        <Button onClick={onAgain} className="btn-hero rounded-full">Tentar novamente</Button>
+        <h2 className="text-2xl font-bold mb-2">Sem mais sugestões</h2>
+        <p className="text-muted-foreground mb-6">Gere uma nova rodada com base no seu perfil.</p>
+        <Button onClick={onAgain} className="btn-hero rounded-full">Gerar novas</Button>
       </div>
     );
   }
@@ -507,74 +454,70 @@ function Results({
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full card-glow text-xs font-semibold text-muted-foreground mb-4">
           <Sparkles className="w-3.5 h-3.5 text-primary" /> Recomendações pra você
         </div>
-        <h2 className="text-4xl md:text-5xl font-bold">Seus <span className="text-gradient">5 próximos jogos</span></h2>
+        <h2 className="text-4xl md:text-5xl font-bold">Seus <span className="text-gradient">próximos jogos</span></h2>
       </div>
-      <div className="grid gap-6">
+      <div className="grid gap-5 md:grid-cols-2">
         {games.map((g, i) => (
-          <GameCard key={g.id} game={g} index={i} onReplace={() => onReplace(i, g.id)} replacing={replacing === i} />
+          <GameCard key={`${g.nome}-${i}`} game={g} index={i} onDismiss={() => onDismiss(i, g.nome)} />
         ))}
       </div>
+      <div className="text-center mt-10">
+        <Button variant="ghost" onClick={onAgain}>
+          <RotateCcw className="w-4 h-4 mr-2" /> Gerar outras sugestões
+        </Button>
+      </div>
     </div>
   );
 }
 
-function GameCard({ game, index, onReplace, replacing }: { game: RawgGame; index: number; onReplace: () => void; replacing: boolean }) {
-  const reason = useMemo(() => buildReason(game), [game]);
-  const steamStore = game.stores?.find((s) => s.store?.slug === "steam");
-  const storeUrl = steamStore?.url ?? `https://rawg.io/games/${game.slug}`;
+function difficultyTone(d: string): string {
+  const k = d.toLowerCase();
+  if (k.includes("fácil") || k.includes("facil")) return "text-emerald-400";
+  if (k.includes("difíc") || k.includes("dific")) return "text-rose-400";
+  return "text-amber-400";
+}
 
+function GameCard({ game, index, onDismiss }: { game: Recommendation; index: number; onDismiss: () => void }) {
   return (
-    <div className="card-glow rounded-2xl overflow-hidden md:flex animate-fade-up" style={{ animationDelay: `${index * 80}ms` }}>
-      <div className="md:w-72 md:shrink-0 aspect-video md:aspect-auto relative">
-        {game.background_image ? (
-          <img src={game.background_image} alt={game.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full bg-secondary" />
-        )}
-        <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-background/80 backdrop-blur text-xs font-bold flex items-center gap-1">
-          <Star className="w-3 h-3 fill-primary text-primary" />
-          {game.rating?.toFixed(1) ?? "—"}
+    <div className="card-glow rounded-2xl p-6 flex flex-col animate-fade-up" style={{ animationDelay: `${index * 70}ms` }}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <h3 className="text-2xl font-bold leading-tight">{game.nome}</h3>
+        <div className="text-xs text-muted-foreground font-mono shrink-0 mt-1">#{index + 1}</div>
+      </div>
+
+      <div className="text-xs uppercase tracking-wider font-bold text-primary mb-3">{game.genero}</div>
+
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {game.plataformas.map((p) => (
+          <span key={p} className="text-[11px] font-semibold px-2 py-0.5 rounded bg-secondary text-secondary-foreground">{p}</span>
+        ))}
+      </div>
+
+      <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{game.descricao}</p>
+
+      <div className="flex gap-4 text-xs mb-5">
+        <div className="flex items-center gap-1.5">
+          <Trophy className={`w-3.5 h-3.5 ${difficultyTone(game.dificuldade)}`} />
+          <span className="text-muted-foreground">Dificuldade:</span>
+          <span className={`font-bold ${difficultyTone(game.dificuldade)}`}>{game.dificuldade}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-accent" />
+          <span className="text-muted-foreground">Tempo médio:</span>
+          <span className="font-bold text-foreground">{game.tempoMedio}</span>
         </div>
       </div>
-      <div className="p-6 flex-1 flex flex-col">
-        <div className="flex items-start justify-between gap-4 mb-2">
-          <h3 className="text-2xl font-bold">{game.name}</h3>
-          <div className="text-xs text-muted-foreground font-mono shrink-0">#{index + 1}</div>
-        </div>
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {game.genres?.slice(0, 3).map((gn) => (
-            <span key={gn.id} className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-secondary text-secondary-foreground">{gn.name}</span>
-          ))}
-        </div>
-        <p className="text-sm text-muted-foreground mb-3">
-          <span className="font-semibold text-foreground">Por que vai gostar: </span>{reason}
-        </p>
-        <div className="text-xs text-muted-foreground mb-4">
-          {game.platforms?.slice(0, 5).map((p) => p.platform.name).join(" · ")}
-        </div>
-        <div className="flex gap-2 mt-auto">
-          <Button asChild className="btn-hero rounded-full">
-            <a href={storeUrl} target="_blank" rel="noreferrer">
-              Jogar agora <ExternalLink className="w-3.5 h-3.5 ml-2" />
-            </a>
-          </Button>
-          <Button variant="ghost" onClick={onReplace} disabled={replacing}>
-            {replacing ? "Trocando..." : (<><X className="w-4 h-4 mr-2" /> Não me interessa</>)}
-          </Button>
-        </div>
+
+      <div className="flex gap-2 mt-auto">
+        <Button asChild className="btn-hero rounded-full flex-1">
+          <a href={game.linkBusca} target="_blank" rel="noreferrer">
+            Ver na Steam <ExternalLink className="w-3.5 h-3.5 ml-2" />
+          </a>
+        </Button>
+        <Button variant="ghost" size="icon" onClick={onDismiss} aria-label="Não me interessa">
+          <X className="w-4 h-4" />
+        </Button>
       </div>
     </div>
   );
-}
-
-function buildReason(g: RawgGame): string {
-  const genres = g.genres?.slice(0, 2).map((x) => x.name.toLowerCase()).join(" e ");
-  const rating = g.rating ? `nota ${g.rating.toFixed(1)} da comunidade` : "boa aceitação";
-  const year = g.released?.slice(0, 4);
-  const parts = [
-    genres ? `Combina ${genres} com o estilo que você marcou` : "Bate com o perfil que você escolheu",
-    `tem ${rating}`,
-    year ? `lançado em ${year}` : null,
-  ].filter(Boolean);
-  return parts.join(" · ") + ".";
 }
