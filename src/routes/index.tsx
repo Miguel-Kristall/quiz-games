@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendGames, type Recommendation } from "@/lib/recommend.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Gamepad2, Sparkles, X, ArrowRight, ArrowLeft, RotateCcw, ExternalLink, Plus, Clock, Trophy } from "lucide-react";
+import { Gamepad2, Sparkles, X, ArrowRight, ArrowLeft, RotateCcw, ExternalLink, Plus, Clock, Trophy, ThumbsUp, Youtube, Star, Wand2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/")({
 type Option = { id: string; label: string; emoji?: string };
 
 const QUESTIONS: {
-  key: "genres" | "platforms" | "sessionLength" | "playStyle" | "mood" | "visual";
+  key: "genres" | "platforms" | "sessionLength" | "playStyle" | "mood" | "visual" | "challenge" | "hook";
   title: string;
   subtitle: string;
   multi: boolean;
@@ -107,6 +107,29 @@ const QUESTIONS: {
       { id: "abstrato", label: "Abstrato", emoji: "🌀" },
     ],
   },
+  {
+    key: "challenge",
+    title: "Nível de desafio preferido?",
+    subtitle: "Escolha um",
+    multi: false,
+    options: [
+      { id: "tranquilo", label: "Tranquilo", emoji: "🧘" },
+      { id: "equilibrado", label: "Equilibrado", emoji: "⚖️" },
+      { id: "punitivo", label: "Punitivo", emoji: "💀" },
+    ],
+  },
+  {
+    key: "hook",
+    title: "O que mais te prende num jogo?",
+    subtitle: "Escolha um",
+    multi: false,
+    options: [
+      { id: "historia", label: "História", emoji: "📖" },
+      { id: "gameplay", label: "Gameplay", emoji: "🎯" },
+      { id: "mundo", label: "Mundo aberto", emoji: "🌍" },
+      { id: "progressao", label: "Progressão / loot", emoji: "💎" },
+    ],
+  },
 ];
 
 type Answers = Record<string, string[]>;
@@ -118,6 +141,8 @@ function App() {
   const [favoriteGames, setFavoriteGames] = useState<string[]>([]);
   const [results, setResults] = useState<Recommendation[]>([]);
   const [excludeNames, setExcludeNames] = useState<string[]>([]);
+  const [likedNames, setLikedNames] = useState<string[]>([]);
+  const [platformFilter, setPlatformFilter] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const recommend = useServerFn(recommendGames);
@@ -139,10 +164,10 @@ function App() {
     });
   }
 
-  async function runRecommend(extraExclude: string[] = []) {
+  async function runRecommend() {
     setPhase("loading");
     setError(null);
-    const ex = [...excludeNames, ...extraExclude];
+    setPlatformFilter(null);
     const r = await recommend({
       data: {
         genres: answers.genres ?? [],
@@ -151,11 +176,14 @@ function App() {
         playStyle: answers.playStyle?.[0] ?? "",
         mood: answers.mood?.[0] ?? "",
         visual: answers.visual?.[0] ?? "",
+        challenge: answers.challenge?.[0] ?? "",
+        hook: answers.hook?.[0] ?? "",
         favoriteGames,
-        exclude: ex,
+        liked: likedNames,
+        exclude: excludeNames,
       },
     });
-    setExcludeNames([...ex, ...r.results.map((g) => g.nome)]);
+    setExcludeNames((prev) => [...prev, ...r.results.map((g) => g.nome)]);
     setResults(r.results);
     setError(r.error ?? null);
     setPhase("results");
@@ -164,6 +192,11 @@ function App() {
   function dismissOne(idx: number, name: string) {
     setResults((prev) => prev.filter((_, i) => i !== idx));
     setExcludeNames((prev) => [...prev, name]);
+    setLikedNames((prev) => prev.filter((n) => n !== name));
+  }
+
+  function likeOne(name: string) {
+    setLikedNames((prev) => (prev.includes(name) ? prev : [...prev, name]));
   }
 
   function reset() {
@@ -173,6 +206,8 @@ function App() {
     setFavoriteGames([]);
     setResults([]);
     setExcludeNames([]);
+    setLikedNames([]);
+    setPlatformFilter(null);
     setError(null);
   }
 
@@ -237,7 +272,11 @@ function App() {
           <Results
             games={results}
             error={error}
+            likedNames={likedNames}
+            platformFilter={platformFilter}
+            setPlatformFilter={setPlatformFilter}
             onDismiss={dismissOne}
+            onLike={likeOne}
             onAgain={() => runRecommend()}
           />
         )}
@@ -262,7 +301,7 @@ function Intro({ onStart }: { onStart: () => void }) {
         <span className="text-gradient">próximo jogo favorito</span>
       </h1>
       <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-10">
-        Responda 6 perguntas rápidas, conte o que você já jogou, e a IA entrega 5 recomendações sob medida.
+        Responda 8 perguntas rápidas, conte o que você já jogou, e a IA entrega 5 recomendações sob medida.
       </p>
       <Button size="lg" onClick={onStart} className="btn-hero text-base px-8 h-14 rounded-full font-bold">
         Começar quiz
@@ -422,14 +461,32 @@ function Loading() {
 function Results({
   games,
   error,
+  likedNames,
+  platformFilter,
+  setPlatformFilter,
   onDismiss,
+  onLike,
   onAgain,
 }: {
   games: Recommendation[];
   error: string | null;
+  likedNames: string[];
+  platformFilter: string | null;
+  setPlatformFilter: (p: string | null) => void;
   onDismiss: (idx: number, name: string) => void;
+  onLike: (name: string) => void;
   onAgain: () => void;
 }) {
+  const availablePlatforms = useMemo(() => {
+    const s = new Set<string>();
+    games.forEach((g) => g.plataformas.forEach((p) => s.add(p)));
+    return Array.from(s).sort();
+  }, [games]);
+
+  const filtered = platformFilter
+    ? games.filter((g) => g.plataformas.includes(platformFilter))
+    : games;
+
   if (error && games.length === 0) {
     return (
       <div className="py-20 text-center animate-fade-up">
@@ -450,18 +507,62 @@ function Results({
   }
   return (
     <div className="animate-fade-up">
-      <div className="text-center mb-10">
+      <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full card-glow text-xs font-semibold text-muted-foreground mb-4">
           <Sparkles className="w-3.5 h-3.5 text-primary" /> Recomendações pra você
         </div>
         <h2 className="text-4xl md:text-5xl font-bold">Seus <span className="text-gradient">próximos jogos</span></h2>
+        {likedNames.length > 0 && (
+          <p className="text-sm text-muted-foreground mt-3">
+            {likedNames.length} curtido{likedNames.length > 1 ? "s" : ""} — vamos usar como referência.
+          </p>
+        )}
       </div>
+
+      {availablePlatforms.length > 1 && (
+        <div className="flex flex-wrap gap-2 justify-center mb-8">
+          <button
+            onClick={() => setPlatformFilter(null)}
+            className={`chip ${platformFilter === null ? "chip-active" : ""}`}
+          >
+            Todas
+          </button>
+          {availablePlatforms.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPlatformFilter(p === platformFilter ? null : p)}
+              className={`chip ${platformFilter === p ? "chip-active" : ""}`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid gap-5 md:grid-cols-2">
-        {games.map((g, i) => (
-          <GameCard key={`${g.nome}-${i}`} game={g} index={i} onDismiss={() => onDismiss(i, g.nome)} />
-        ))}
+        {filtered.map((g) => {
+          const originalIdx = games.indexOf(g);
+          return (
+            <GameCard
+              key={`${g.nome}-${originalIdx}`}
+              game={g}
+              index={originalIdx}
+              liked={likedNames.includes(g.nome)}
+              onDismiss={() => onDismiss(originalIdx, g.nome)}
+              onLike={() => onLike(g.nome)}
+            />
+          );
+        })}
       </div>
-      <div className="text-center mt-10">
+
+      <div className="flex flex-wrap gap-3 justify-center mt-10">
+        <Button
+          onClick={onAgain}
+          disabled={likedNames.length === 0}
+          className="btn-hero rounded-full h-11 px-5 font-bold"
+        >
+          <Wand2 className="w-4 h-4 mr-2" /> Mais parecidos com curtidos
+        </Button>
         <Button variant="ghost" onClick={onAgain}>
           <RotateCcw className="w-4 h-4 mr-2" /> Gerar outras sugestões
         </Button>
@@ -477,12 +578,38 @@ function difficultyTone(d: string): string {
   return "text-amber-400";
 }
 
-function GameCard({ game, index, onDismiss }: { game: Recommendation; index: number; onDismiss: () => void }) {
+function scoreTone(n: number): string {
+  if (n >= 8.5) return "text-emerald-400 border-emerald-400/40 bg-emerald-400/10";
+  if (n >= 7) return "text-amber-400 border-amber-400/40 bg-amber-400/10";
+  return "text-rose-400 border-rose-400/40 bg-rose-400/10";
+}
+
+function GameCard({
+  game,
+  index,
+  liked,
+  onDismiss,
+  onLike,
+}: {
+  game: Recommendation;
+  index: number;
+  liked: boolean;
+  onDismiss: () => void;
+  onLike: () => void;
+}) {
   return (
     <div className="card-glow rounded-2xl p-6 flex flex-col animate-fade-up" style={{ animationDelay: `${index * 70}ms` }}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <h3 className="text-2xl font-bold leading-tight">{game.nome}</h3>
-        <div className="text-xs text-muted-foreground font-mono shrink-0 mt-1">#{index + 1}</div>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="min-w-0">
+          <h3 className="text-2xl font-bold leading-tight">{game.nome}</h3>
+          {game.ano ? <div className="text-xs text-muted-foreground mt-0.5">{game.ano}</div> : null}
+        </div>
+        {typeof game.nota === "number" && (
+          <div className={`shrink-0 flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg border ${scoreTone(game.nota)}`}>
+            <Star className="w-3 h-3 fill-current" />
+            {game.nota.toFixed(1)}
+          </div>
+        )}
       </div>
 
       <div className="text-xs uppercase tracking-wider font-bold text-primary mb-3">{game.genero}</div>
@@ -493,17 +620,34 @@ function GameCard({ game, index, onDismiss }: { game: Recommendation; index: num
         ))}
       </div>
 
+      {game.destaques && game.destaques.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {game.destaques.map((d) => (
+            <span key={d} className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-border text-muted-foreground">
+              {d}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {game.porqueVoceVaiGostar && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 mb-4">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-primary mb-1">
+            <Sparkles className="w-3 h-3" /> Por que você vai gostar
+          </div>
+          <p className="text-sm text-foreground/90 leading-relaxed">{game.porqueVoceVaiGostar}</p>
+        </div>
+      )}
+
       <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{game.descricao}</p>
 
       <div className="flex gap-4 text-xs mb-5">
         <div className="flex items-center gap-1.5">
           <Trophy className={`w-3.5 h-3.5 ${difficultyTone(game.dificuldade)}`} />
-          <span className="text-muted-foreground">Dificuldade:</span>
           <span className={`font-bold ${difficultyTone(game.dificuldade)}`}>{game.dificuldade}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5 text-accent" />
-          <span className="text-muted-foreground">Tempo médio:</span>
           <span className="font-bold text-foreground">{game.tempoMedio}</span>
         </div>
       </div>
@@ -513,6 +657,22 @@ function GameCard({ game, index, onDismiss }: { game: Recommendation; index: num
           <a href={game.linkBusca} target="_blank" rel="noreferrer">
             Ver na Steam <ExternalLink className="w-3.5 h-3.5 ml-2" />
           </a>
+        </Button>
+        {game.linkYoutube && (
+          <Button asChild variant="ghost" size="icon" aria-label="Ver trailer">
+            <a href={game.linkYoutube} target="_blank" rel="noreferrer">
+              <Youtube className="w-4 h-4" />
+            </a>
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onLike}
+          aria-label="Mais como este"
+          className={liked ? "text-primary" : ""}
+        >
+          <ThumbsUp className={`w-4 h-4 ${liked ? "fill-current" : ""}`} />
         </Button>
         <Button variant="ghost" size="icon" onClick={onDismiss} aria-label="Não me interessa">
           <X className="w-4 h-4" />
