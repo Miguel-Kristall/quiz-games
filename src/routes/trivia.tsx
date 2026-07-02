@@ -65,6 +65,18 @@ function TriviaPage() {
     fetchWithTimeout(API_URL, 10000)
       .then((data) => {
         if (cancelled) return;
+        if (data?.response_code && data.response_code !== 0) {
+          const codes: Record<number, string> = {
+            1: "A API não retornou perguntas suficientes.",
+            2: "Parâmetros inválidos enviados à API.",
+            3: "Sessão de token inválida.",
+            4: "Sessão de token esgotada.",
+            5: "Muitas requisições. Aguarde um instante.",
+          };
+          setErrorMessage(codes[data.response_code] || "Erro na API do Open Trivia DB.");
+          setStatus("error");
+          return;
+        }
         if (!data?.results?.length) {
           setStatus("empty");
           setErrorMessage("Nenhuma pergunta foi retornada. Tente recarregar.");
