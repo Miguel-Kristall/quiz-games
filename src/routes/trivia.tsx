@@ -114,7 +114,7 @@ function TriviaPage() {
 
   const total = questions.length;
   const progress = total ? ((current + (selected ? 1 : 0)) / total) * 100 : 0;
-  const finished = !loading && total > 0 && current >= total;
+  const finished = status === "idle" && total > 0 && current >= total;
 
   return (
     <div className="min-h-screen flex flex-col">
