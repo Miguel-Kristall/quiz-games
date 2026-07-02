@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, ArrowLeft, Check, X } from "lucide-react";
+import { Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, ArrowLeft, Check, X, AlertCircle, WifiOff } from "lucide-react";
 
 export const Route = createFileRoute("/trivia")({
   head: () => ({
@@ -27,30 +27,59 @@ function decodeHTML(str: string) {
 
 type Q = { question: string; correct: string; answers: string[] };
 
+type LoadingState = "idle" | "loading" | "timeout" | "error" | "empty";
+
+async function fetchWithTimeout(url: string, ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    clearTimeout(timer);
+    if (e instanceof DOMException && e.name === "AbortError") throw new Error("timeout");
+    throw e;
+  }
+}
+
 function TriviaPage() {
   const [questions, setQuestions] = useState<Q[]>([]);
   const [current, setCurrent] = useState(0);
   const [score, setScore] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<LoadingState>("loading");
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    setStatus("loading");
+    setErrorMessage("");
     setQuestions([]);
     setCurrent(0);
     setScore(0);
     setSelected(null);
-    fetch(API_URL)
-      .then((res) => res.json())
+
+    fetchWithTimeout(API_URL, 10000)
       .then((data) => {
         if (cancelled) return;
+        if (data?.response_code && data.response_code !== 0) {
+          const codes: Record<number, string> = {
+            1: "A API não retornou perguntas suficientes.",
+            2: "Parâmetros inválidos enviados à API.",
+            3: "Sessão de token inválida.",
+            4: "Sessão de token esgotada.",
+            5: "Muitas requisições. Aguarde um instante.",
+          };
+          setErrorMessage(codes[data.response_code] || "Erro na API do Open Trivia DB.");
+          setStatus("error");
+          return;
+        }
         if (!data?.results?.length) {
-          setError("Não foi possível carregar as perguntas. Tente novamente em instantes.");
-          setLoading(false);
+          setStatus("empty");
+          setErrorMessage("Nenhuma pergunta foi retornada. Tente recarregar.");
           return;
         }
         const formatted: Q[] = data.results.map((q: any) => {
@@ -64,13 +93,19 @@ function TriviaPage() {
           };
         });
         setQuestions(formatted);
-        setLoading(false);
+        setStatus("idle");
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
-        setError("Erro ao buscar perguntas.");
-        setLoading(false);
+        const message = err.message === "timeout"
+          ? "A API do Open Trivia DB demorou demais para responder. Tente novamente."
+          : err.message?.includes("fetch")
+          ? "Não foi possível conectar à API do Open Trivia DB. Verifique sua internet."
+          : "Erro ao buscar perguntas. Tente novamente em instantes.";
+        setErrorMessage(message);
+        setStatus(err.message === "timeout" ? "timeout" : "error");
       });
+
     return () => {
       cancelled = true;
     };
@@ -91,7 +126,7 @@ function TriviaPage() {
 
   const total = questions.length;
   const progress = total ? ((current + (selected ? 1 : 0)) / total) * 100 : 0;
-  const finished = !loading && total > 0 && current >= total;
+  const finished = status === "idle" && total > 0 && current >= total;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -116,23 +151,52 @@ function TriviaPage() {
           <p className="text-muted-foreground mt-3">10 perguntas do Open Trivia DB, categoria Video Games.</p>
         </div>
 
-        {loading && (
-          <div className="py-20 text-center animate-fade-up">
-            <div className="inline-flex w-14 h-14 rounded-full btn-hero items-center justify-center animate-pulse-glow mb-4">
-              <Sparkles className="w-6 h-6" />
+        {status === "loading" && (
+          <div className="py-10 animate-fade-up">
+            <div className="text-center mb-10">
+              <div className="inline-flex w-14 h-14 rounded-full btn-hero items-center justify-center animate-pulse-glow mb-4">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <p className="text-muted-foreground">Carregando perguntas...</p>
             </div>
-            <p className="text-muted-foreground">Carregando perguntas...</p>
+            <div className="card-glow rounded-2xl p-6 md:p-8 space-y-6">
+              <div className="space-y-3">
+                <div className="h-4 bg-muted rounded w-3/4 animate-pulse" />
+                <div className="h-4 bg-muted rounded w-full animate-pulse" />
+                <div className="h-4 bg-muted rounded w-5/6 animate-pulse" />
+              </div>
+              <div className="grid gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-12 rounded-full bg-muted animate-pulse" />
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {!loading && error && (
+        {status === "timeout" && (
           <div className="py-16 text-center animate-fade-up">
-            <p className="text-muted-foreground mb-6">{error}</p>
+            <div className="inline-flex w-14 h-14 rounded-full bg-amber-400/10 text-amber-300 items-center justify-center mb-4">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">A API está demorando</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">{errorMessage}</p>
             <Button onClick={restart} className="btn-hero rounded-full">Tentar novamente</Button>
           </div>
         )}
 
-        {!loading && !error && !finished && total > 0 && (
+        {(status === "error" || status === "empty") && (
+          <div className="py-16 text-center animate-fade-up">
+            <div className="inline-flex w-14 h-14 rounded-full bg-rose-400/10 text-rose-300 items-center justify-center mb-4">
+              <WifiOff className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">Não foi possível carregar</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">{errorMessage}</p>
+            <Button onClick={restart} className="btn-hero rounded-full">Tentar novamente</Button>
+          </div>
+        )}
+
+        {status === "idle" && !finished && total > 0 && (
           <div className="animate-fade-up">
             <div className="mb-8">
               <div className="flex justify-between text-xs font-semibold text-muted-foreground mb-2">
