@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, ArrowLeft, Check, X } from "lucide-react";
+import { Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, ArrowLeft, Check, X, AlertCircle, WifiOff } from "lucide-react";
 
 export const Route = createFileRoute("/trivia")({
   head: () => ({
