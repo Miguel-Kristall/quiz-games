@@ -139,23 +139,52 @@ function TriviaPage() {
           <p className="text-muted-foreground mt-3">10 perguntas do Open Trivia DB, categoria Video Games.</p>
         </div>
 
-        {loading && (
-          <div className="py-20 text-center animate-fade-up">
-            <div className="inline-flex w-14 h-14 rounded-full btn-hero items-center justify-center animate-pulse-glow mb-4">
-              <Sparkles className="w-6 h-6" />
+        {status === "loading" && (
+          <div className="py-10 animate-fade-up">
+            <div className="text-center mb-10">
+              <div className="inline-flex w-14 h-14 rounded-full btn-hero items-center justify-center animate-pulse-glow mb-4">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <p className="text-muted-foreground">Carregando perguntas...</p>
             </div>
-            <p className="text-muted-foreground">Carregando perguntas...</p>
+            <div className="card-glow rounded-2xl p-6 md:p-8 space-y-6">
+              <div className="space-y-3">
+                <div className="h-4 bg-muted rounded w-3/4 animate-pulse" />
+                <div className="h-4 bg-muted rounded w-full animate-pulse" />
+                <div className="h-4 bg-muted rounded w-5/6 animate-pulse" />
+              </div>
+              <div className="grid gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-12 rounded-full bg-muted animate-pulse" />
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {!loading && error && (
+        {status === "timeout" && (
           <div className="py-16 text-center animate-fade-up">
-            <p className="text-muted-foreground mb-6">{error}</p>
+            <div className="inline-flex w-14 h-14 rounded-full bg-amber-400/10 text-amber-300 items-center justify-center mb-4">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">A API está demorando</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">{errorMessage}</p>
             <Button onClick={restart} className="btn-hero rounded-full">Tentar novamente</Button>
           </div>
         )}
 
-        {!loading && !error && !finished && total > 0 && (
+        {(status === "error" || status === "empty") && (
+          <div className="py-16 text-center animate-fade-up">
+            <div className="inline-flex w-14 h-14 rounded-full bg-rose-400/10 text-rose-300 items-center justify-center mb-4">
+              <WifiOff className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">Não foi possível carregar</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">{errorMessage}</p>
+            <Button onClick={restart} className="btn-hero rounded-full">Tentar novamente</Button>
+          </div>
+        )}
+
+        {status === "idle" && !finished && total > 0 && (
           <div className="animate-fade-up">
             <div className="mb-8">
               <div className="flex justify-between text-xs font-semibold text-muted-foreground mb-2">
