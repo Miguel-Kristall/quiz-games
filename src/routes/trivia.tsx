@@ -27,30 +27,47 @@ function decodeHTML(str: string) {
 
 type Q = { question: string; correct: string; answers: string[] };
 
+type LoadingState = "idle" | "loading" | "timeout" | "error" | "empty";
+
+async function fetchWithTimeout(url: string, ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    clearTimeout(timer);
+    if (e instanceof DOMException && e.name === "AbortError") throw new Error("timeout");
+    throw e;
+  }
+}
+
 function TriviaPage() {
   const [questions, setQuestions] = useState<Q[]>([]);
   const [current, setCurrent] = useState(0);
   const [score, setScore] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<LoadingState>("loading");
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    setStatus("loading");
+    setErrorMessage("");
     setQuestions([]);
     setCurrent(0);
     setScore(0);
     setSelected(null);
-    fetch(API_URL)
-      .then((res) => res.json())
+
+    fetchWithTimeout(API_URL, 10000)
       .then((data) => {
         if (cancelled) return;
         if (!data?.results?.length) {
-          setError("Não foi possível carregar as perguntas. Tente novamente em instantes.");
-          setLoading(false);
+          setStatus("empty");
+          setErrorMessage("Nenhuma pergunta foi retornada. Tente recarregar.");
           return;
         }
         const formatted: Q[] = data.results.map((q: any) => {
@@ -64,13 +81,19 @@ function TriviaPage() {
           };
         });
         setQuestions(formatted);
-        setLoading(false);
+        setStatus("idle");
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
-        setError("Erro ao buscar perguntas.");
-        setLoading(false);
+        const message = err.message === "timeout"
+          ? "A API do Open Trivia DB demorou demais para responder. Tente novamente."
+          : err.message?.includes("fetch")
+          ? "Não foi possível conectar à API do Open Trivia DB. Verifique sua internet."
+          : "Erro ao buscar perguntas. Tente novamente em instantes.";
+        setErrorMessage(message);
+        setStatus(err.message === "timeout" ? "timeout" : "error");
       });
+
     return () => {
       cancelled = true;
     };
