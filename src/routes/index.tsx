@@ -220,9 +220,13 @@ function App() {
           </div>
           <span className="font-display font-bold text-lg tracking-tight">Qual Jogo Jogar?</span>
         </div>
-        {phase !== "intro" && (
+        {phase !== "intro" ? (
           <Button variant="ghost" size="sm" onClick={reset} className="text-muted-foreground">
             <RotateCcw className="w-4 h-4 mr-2" /> Recomeçar
+          </Button>
+        ) : (
+          <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+            <Link to="/trivia"><Sparkles className="w-4 h-4 mr-2" /> Trivia</Link>
           </Button>
         )}
       </header>
