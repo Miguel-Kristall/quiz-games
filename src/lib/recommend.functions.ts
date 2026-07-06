@@ -122,37 +122,41 @@ Regras:
 export const recommendGames = createServerFn({ method: "POST" })
   .inputValidator((d: RecommendInput) => d)
   .handler(async ({ data }) => {
-    const key = process.env.ANTHROPIC_API_KEY;
+    const key = process.env.LOVABLE_API_KEY;
     if (!key) {
-      return { results: [] as Recommendation[], error: "ANTHROPIC_API_KEY não configurada" };
+      return { results: [] as Recommendation[], error: "LOVABLE_API_KEY não configurada" };
     }
 
     const prompt = buildPrompt(data);
 
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
+        "Lovable-API-Key": key,
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 3000,
+        model: "google/gemini-3-flash-preview",
         messages: [{ role: "user", content: prompt }],
       }),
     });
 
     if (!r.ok) {
       const txt = await r.text();
-      console.error("Anthropic error", r.status, txt);
-      return { results: [] as Recommendation[], error: `Anthropic ${r.status}` };
+      console.error("Lovable AI Gateway error", r.status, txt);
+      if (r.status === 429) {
+        return { results: [] as Recommendation[], error: "Limite de requisições atingido. Tente novamente em instantes." };
+      }
+      if (r.status === 402) {
+        return { results: [] as Recommendation[], error: "Créditos de IA esgotados. Adicione créditos ao workspace." };
+      }
+      return { results: [] as Recommendation[], error: `Gateway ${r.status}` };
     }
 
     const j = (await r.json()) as {
-      content?: { type: string; text?: string }[];
+      choices?: { message?: { content?: string } }[];
     };
-    const text = j.content?.map((c) => c.text ?? "").join("") ?? "";
+    const text = j.choices?.[0]?.message?.content ?? "";
 
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) {
