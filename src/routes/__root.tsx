@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "quiz sobre games e indicações." },
+      { name: "description", content: "Quiz interativo que recomenda o próximo jogo perfeito para você com base no seu gosto e histórico." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "quiz sobre games e indicações." },
+      { property: "og:description", content: "Quiz interativo que recomenda o próximo jogo perfeito para você com base no seu gosto e histórico." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "quiz sobre games e indicações." },
+      { name: "twitter:description", content: "Quiz interativo que recomenda o próximo jogo perfeito para você com base no seu gosto e histórico." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/56f1dc07-2fd0-4711-8878-9d69db71b94a/id-preview-af5479f2--96c73b21-7caa-419e-85ec-59316926c14d.lovable.app-1783360347647.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/56f1dc07-2fd0-4711-8878-9d69db71b94a/id-preview-af5479f2--96c73b21-7caa-419e-85ec-59316926c14d.lovable.app-1783360347647.png" },
     ],
     links: [
       {
