@@ -15,11 +15,12 @@ export interface TriviaInput {
 
 const CATEGORY_LABEL: Record<string, string> = {
   rpg: "RPG (JRPGs, WRPGs, ARPGs, MMORPGs)",
-  fps: "FPS e shooters",
+  fps: "FPS e jogos de ação/tiro",
   indie: "jogos indie",
   retro: "clássicos e retrogames (até geração PS2/GameCube)",
   mobile: "jogos mobile",
   esports: "eSports e jogos competitivos",
+  nintendo: "jogos e franquias da Nintendo (Mario, Zelda, Metroid, Pokémon, Splatoon, Smash, etc.)",
   geral: "cultura geral de videogames",
   todas: "todas as categorias de videogames",
 };
