@@ -3,7 +3,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, ArrowLeft, Check, X, AlertCircle, WifiOff, Swords, Gamepad, Ghost, Cpu, Smartphone, Zap, Globe } from "lucide-react";
+import {
+  Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, ArrowLeft, Check, X,
+  AlertCircle, WifiOff, Swords, Crosshair, Cpu, Zap, Ghost, Globe, Star,
+  Timer as TimerIcon,
+} from "lucide-react";
 import { generateTrivia, type TriviaQuestion } from "@/lib/trivia.functions";
 
 export const Route = createFileRoute("/trivia")({
@@ -18,28 +22,35 @@ export const Route = createFileRoute("/trivia")({
   component: TriviaPage,
 });
 
+const QUESTIONS_PER_ROUND = 18;
+
 const CATEGORIES: { id: string; label: string; icon: typeof Swords; hint: string }[] = [
-  { id: "todas", label: "Todas", icon: Globe, hint: "Mix geral" },
+  { id: "todas", label: "Todas as categorias", icon: Globe, hint: "Modo misto" },
   { id: "rpg", label: "RPG", icon: Swords, hint: "JRPG, ARPG, MMO" },
-  { id: "fps", label: "FPS", icon: Gamepad, hint: "Shooters" },
+  { id: "fps", label: "FPS / Ação", icon: Crosshair, hint: "Shooters e ação" },
+  { id: "retro", label: "Retrô / Clássicos", icon: Cpu, hint: "Até PS2/GameCube" },
   { id: "indie", label: "Indie", icon: Sparkles, hint: "Jogos independentes" },
-  { id: "retro", label: "Retro", icon: Cpu, hint: "Clássicos" },
-  { id: "mobile", label: "Mobile", icon: Smartphone, hint: "Celular" },
+  { id: "nintendo", label: "Nintendo", icon: Star, hint: "Mario, Zelda, Pokémon..." },
   { id: "esports", label: "eSports", icon: Zap, hint: "Competitivo" },
-  { id: "geral", label: "Geral", icon: Ghost, hint: "Cultura gamer" },
+  { id: "geral", label: "Cultura Geral", icon: Ghost, hint: "Cultura gamer" },
 ];
 
 const DIFFICULTIES: { id: string; label: string; hint: string }[] = [
-  { id: "facil", label: "Fácil", hint: "Mainstream, populares" },
-  { id: "medio", label: "Médio", hint: "Requer conhecimento" },
-  { id: "dificil", label: "Difícil", hint: "Nichado e curiosidades" },
+  { id: "facil", label: "Fácil", hint: "Mainstream • 10 pts" },
+  { id: "medio", label: "Médio", hint: "Requer conhecimento • 20 pts" },
+  { id: "dificil", label: "Difícil", hint: "Nichado • 30 pts" },
 ];
+
+const POINTS_PER_DIFFICULTY: Record<string, number> = { facil: 10, medio: 20, dificil: 30 };
+const TIMER_PER_DIFFICULTY: Record<string, number> = { facil: 15, medio: 20, dificil: 30 };
 
 type Phase = "setup" | "loading" | "playing" | "finished" | "error";
 type ErrorKind = "timeout" | "error" | "empty";
 
+const TIMEOUT_SENTINEL = "__timeout__";
+
 const STORAGE_KEY = "trivia_asked_questions";
-const MAX_STORED = 200; // limite pra não estourar
+const MAX_STORED = 200;
 const REQUEST_TIMEOUT_MS = 45000;
 
 function loadAsked(): string[] {
@@ -74,12 +85,33 @@ function TriviaPage() {
   const [questions, setQuestions] = useState<TriviaQuestion[]>([]);
   const [current, setCurrent] = useState(0);
   const [score, setScore] = useState(0);
+  const [points, setPoints] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number>(0);
   const [errorKind, setErrorKind] = useState<ErrorKind>("error");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Per-question countdown timer
+  const questionSeconds = TIMER_PER_DIFFICULTY[playedDifficulty] ?? 20;
+  const pointsPerCorrect = POINTS_PER_DIFFICULTY[playedDifficulty] ?? 20;
+
+  useEffect(() => {
+    if (phase !== "playing") return;
+    setTimeLeft(questionSeconds);
+  }, [phase, current, questionSeconds]);
+
+  useEffect(() => {
+    if (phase !== "playing" || selected !== null) return;
+    if (timeLeft <= 0) {
+      setSelected(TIMEOUT_SENTINEL);
+      return;
+    }
+    const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
+    return () => clearTimeout(id);
+  }, [phase, selected, timeLeft]);
 
   async function startQuiz() {
     setPhase("loading");
@@ -87,6 +119,7 @@ function TriviaPage() {
     setQuestions([]);
     setCurrent(0);
     setScore(0);
+    setPoints(0);
     setSelected(null);
     setPlayedCategory(category);
     setPlayedDifficulty(difficulty);
@@ -132,7 +165,10 @@ function TriviaPage() {
   function handleAnswer(a: string) {
     if (selected) return;
     setSelected(a);
-    if (a === questions[current].correct) setScore((s) => s + 1);
+    if (a === questions[current].correct) {
+      setScore((s) => s + 1);
+      setPoints((p) => p + pointsPerCorrect);
+    }
   }
 
   function next() {
@@ -149,11 +185,15 @@ function TriviaPage() {
     setQuestions([]);
     setCurrent(0);
     setScore(0);
+    setPoints(0);
     setSelected(null);
   }
 
   const total = questions.length;
   const progress = total ? ((current + (selected ? 1 : 0)) / total) * 100 : 0;
+  const timePct = questionSeconds ? (timeLeft / questionSeconds) * 100 : 0;
+  const timedOut = selected === TIMEOUT_SENTINEL;
+  const maxPoints = total * pointsPerCorrect;
 
   const catLabel = CATEGORIES.find((c) => c.id === playedCategory)?.label ?? playedCategory;
   const diffLabel = DIFFICULTIES.find((d) => d.id === playedDifficulty)?.label ?? playedDifficulty;
@@ -185,7 +225,7 @@ function TriviaPage() {
           <div className="animate-fade-up space-y-8">
             <div className="card-glow rounded-2xl p-6 md:p-8">
               <h2 className="text-lg font-bold mb-1">Escolha a categoria</h2>
-              <p className="text-sm text-muted-foreground mb-5">Sobre o que vão ser as perguntas.</p>
+              <p className="text-sm text-muted-foreground mb-5">Sobre o que vão ser as perguntas. Cada rodada tem {QUESTIONS_PER_ROUND} perguntas.</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {CATEGORIES.map((c) => {
                   const Icon = c.icon;
@@ -194,11 +234,12 @@ function TriviaPage() {
                     <button
                       key={c.id}
                       onClick={() => setCategory(c.id)}
-                      className={`chip flex-col !h-auto py-4 gap-1.5 ${active ? "chip-active" : ""}`}
+                      className={`chip flex-col !h-auto py-4 gap-1.5 text-center ${active ? "chip-active" : ""}`}
                     >
                       <Icon className="w-5 h-5" />
-                      <span className="font-semibold text-sm">{c.label}</span>
+                      <span className="font-semibold text-sm leading-tight">{c.label}</span>
                       <span className="text-[10px] opacity-70">{c.hint}</span>
+                      <span className="text-[10px] opacity-60">{QUESTIONS_PER_ROUND} perguntas</span>
                     </button>
                   );
                 })}
@@ -207,7 +248,7 @@ function TriviaPage() {
 
             <div className="card-glow rounded-2xl p-6 md:p-8">
               <h2 className="text-lg font-bold mb-1">Escolha a dificuldade</h2>
-              <p className="text-sm text-muted-foreground mb-5">O quão nichadas as perguntas vão ser.</p>
+              <p className="text-sm text-muted-foreground mb-5">Mais difícil = mais pontos e mais tempo por pergunta.</p>
               <div className="grid grid-cols-3 gap-3">
                 {DIFFICULTIES.map((d) => {
                   const active = difficulty === d.id;
@@ -219,6 +260,9 @@ function TriviaPage() {
                     >
                       <span className="font-semibold">{d.label}</span>
                       <span className="text-[10px] opacity-70">{d.hint}</span>
+                      <span className="text-[10px] opacity-60 flex items-center gap-1">
+                        <TimerIcon className="w-3 h-3" /> {TIMER_PER_DIFFICULTY[d.id]}s
+                      </span>
                     </button>
                   );
                 })}
@@ -278,6 +322,9 @@ function TriviaPage() {
             <div className="mb-6 flex items-center justify-center gap-2 flex-wrap">
               <span className="chip !py-1.5 !px-3 text-xs">{catLabel}</span>
               <span className="chip !py-1.5 !px-3 text-xs">{diffLabel}</span>
+              <span className="chip !py-1.5 !px-3 text-xs">
+                <Trophy className="w-3.5 h-3.5" /> {points} pts
+              </span>
             </div>
             <div className="mb-8">
               <div className="flex justify-between text-xs font-semibold text-muted-foreground mb-2">
@@ -288,6 +335,19 @@ function TriviaPage() {
             </div>
 
             <div className="card-glow rounded-2xl p-6 md:p-8">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                  <TimerIcon className={`w-3.5 h-3.5 ${timeLeft <= 5 && !selected ? "text-rose-300" : "text-accent"}`} />
+                  <span className={timeLeft <= 5 && !selected ? "text-rose-300" : ""}>
+                    {selected ? "Tempo travado" : `${timeLeft}s`}
+                  </span>
+                </div>
+                <span className="text-xs font-semibold text-muted-foreground">
+                  Vale {pointsPerCorrect} pts
+                </span>
+              </div>
+              <Progress value={timePct} className="h-1 mb-6" />
+
               <h2 className="text-2xl md:text-3xl font-bold mb-6 leading-tight">
                 {questions[current].question}
               </h2>
@@ -319,26 +379,29 @@ function TriviaPage() {
                 <>
                   {(() => {
                     const isRight = selected === questions[current].correct;
+                    const tone = isRight
+                      ? "border-emerald-400/40 bg-emerald-400/10"
+                      : timedOut
+                        ? "border-amber-400/40 bg-amber-400/10"
+                        : "border-rose-400/40 bg-rose-400/10";
+                    const iconTone = isRight
+                      ? "bg-emerald-400/20 text-emerald-300"
+                      : timedOut
+                        ? "bg-amber-400/20 text-amber-300"
+                        : "bg-rose-400/20 text-rose-300";
+                    const titleTone = isRight
+                      ? "text-emerald-300"
+                      : timedOut
+                        ? "text-amber-300"
+                        : "text-rose-300";
                     return (
-                      <div
-                        className={`mt-6 rounded-xl border p-4 flex gap-3 items-start ${
-                          isRight
-                            ? "border-emerald-400/40 bg-emerald-400/10"
-                            : "border-rose-400/40 bg-rose-400/10"
-                        }`}
-                        role="status"
-                        aria-live="polite"
-                      >
-                        <div
-                          className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                            isRight ? "bg-emerald-400/20 text-emerald-300" : "bg-rose-400/20 text-rose-300"
-                          }`}
-                        >
-                          {isRight ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                      <div className={`mt-6 rounded-xl border p-4 flex gap-3 items-start ${tone}`} role="status" aria-live="polite">
+                        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${iconTone}`}>
+                          {isRight ? <Check className="w-4 h-4" /> : timedOut ? <TimerIcon className="w-4 h-4" /> : <X className="w-4 h-4" />}
                         </div>
                         <div className="text-sm">
-                          <p className={`font-bold mb-1 ${isRight ? "text-emerald-300" : "text-rose-300"}`}>
-                            {isRight ? "Correto!" : "Errado."}
+                          <p className={`font-bold mb-1 ${titleTone}`}>
+                            {isRight ? `Correto! +${pointsPerCorrect} pts` : timedOut ? "Tempo esgotado." : "Errado."}
                           </p>
                           {!isRight && (
                             <p className="text-muted-foreground mb-1">
@@ -369,12 +432,19 @@ function TriviaPage() {
               <Trophy className="w-7 h-7" />
             </div>
             <h2 className="text-4xl font-bold mb-2">Fim do quiz!</h2>
-            <p className="text-lg text-muted-foreground mb-4">
+            <p className="text-lg text-muted-foreground mb-2">
               Você acertou <span className="text-gradient font-bold">{score}</span> de {total}
+            </p>
+            <p className="text-3xl font-bold mb-6">
+              <span className="text-gradient">{points}</span>
+              <span className="text-muted-foreground text-lg font-semibold"> / {maxPoints} pts</span>
             </p>
             <div className="flex items-center justify-center gap-2 flex-wrap mb-8">
               <span className="chip !py-1.5 !px-3 text-xs">Categoria: {catLabel}</span>
               <span className="chip !py-1.5 !px-3 text-xs">Dificuldade: {diffLabel}</span>
+              <span className="chip !py-1.5 !px-3 text-xs">
+                <Trophy className="w-3.5 h-3.5" /> {points} pts
+              </span>
             </div>
             <div className="flex gap-3 justify-center flex-wrap">
               <Button onClick={startQuiz} className="btn-hero rounded-full h-12 px-6 font-bold">
