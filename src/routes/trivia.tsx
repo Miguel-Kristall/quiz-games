@@ -316,11 +316,48 @@ function TriviaPage() {
               </div>
 
               {selected && (
-                <div className="flex justify-end mt-8">
-                  <Button onClick={next} className="btn-hero h-12 px-6 rounded-full font-bold">
-                    {current + 1 < total ? "Próxima" : "Ver resultado"} <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </div>
+                <>
+                  {(() => {
+                    const isRight = selected === questions[current].correct;
+                    return (
+                      <div
+                        className={`mt-6 rounded-xl border p-4 flex gap-3 items-start ${
+                          isRight
+                            ? "border-emerald-400/40 bg-emerald-400/10"
+                            : "border-rose-400/40 bg-rose-400/10"
+                        }`}
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <div
+                          className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                            isRight ? "bg-emerald-400/20 text-emerald-300" : "bg-rose-400/20 text-rose-300"
+                          }`}
+                        >
+                          {isRight ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                        </div>
+                        <div className="text-sm">
+                          <p className={`font-bold mb-1 ${isRight ? "text-emerald-300" : "text-rose-300"}`}>
+                            {isRight ? "Correto!" : "Errado."}
+                          </p>
+                          {!isRight && (
+                            <p className="text-muted-foreground mb-1">
+                              Resposta certa: <span className="font-semibold text-foreground">{questions[current].correct}</span>
+                            </p>
+                          )}
+                          {questions[current].explanation && (
+                            <p className="text-muted-foreground leading-relaxed">{questions[current].explanation}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div className="flex justify-end mt-6">
+                    <Button onClick={next} className="btn-hero h-12 px-6 rounded-full font-bold">
+                      {current + 1 < total ? "Próxima" : "Ver resultado"} <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
           </div>
