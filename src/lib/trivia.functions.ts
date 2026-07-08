@@ -4,6 +4,7 @@ export interface TriviaQuestion {
   question: string;
   correct: string;
   answers: string[];
+  explanation: string;
 }
 
 export interface TriviaInput {
@@ -45,7 +46,8 @@ Responda APENAS com um array JSON válido (sem markdown, sem comentários, sem t
   {
     "question": "Texto da pergunta em português.",
     "correct": "Resposta correta",
-    "answers": ["Resposta correta", "Alternativa errada 1", "Alternativa errada 2", "Alternativa errada 3"]
+    "answers": ["Resposta correta", "Alternativa errada 1", "Alternativa errada 2", "Alternativa errada 3"],
+    "explanation": "Explicação curta (1-2 frases) do porquê da resposta correta, com algum contexto ou curiosidade."
   }
 ]
 
@@ -53,6 +55,7 @@ Regras:
 - Exatamente 18 perguntas.
 - Cada pergunta tem 4 alternativas em "answers", incluindo a correta.
 - "correct" DEVE ser idêntica a uma das strings em "answers".
+- "explanation" é obrigatória, curta (máx 2 frases), em português brasileiro, explicando a resposta certa.
 - Perguntas variadas: personagens, jogos, franquias, empresas, datas, mecânicas, trilhas, dubladores.
 - Sem repetir perguntas entre si.
 - Tudo em português brasileiro.
@@ -122,7 +125,7 @@ export const generateTrivia = createServerFn({ method: "POST" })
       const parsed = JSON.parse(match[0]) as TriviaQuestion[];
       const clean = parsed
         .filter((q) => q?.question && q?.correct && Array.isArray(q.answers) && q.answers.includes(q.correct))
-        .map((q) => ({ ...q, answers: shuffle(q.answers) }));
+        .map((q) => ({ ...q, explanation: q.explanation ?? "", answers: shuffle(q.answers) }));
       if (!clean.length) {
         return { results: [] as TriviaQuestion[], error: "Nenhuma pergunta válida gerada." };
       }
