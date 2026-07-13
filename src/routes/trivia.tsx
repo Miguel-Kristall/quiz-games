@@ -453,9 +453,7 @@ function TriviaPage() {
               <Button onClick={backToSetup} variant="ghost" className="rounded-full h-12 px-6">
                 Mudar categoria
               </Button>
-              <Button asChild variant="ghost">
-                <Link to="/">Ver recomendações</Link>
-              </Button>
+
             </div>
           </div>
         )}
