@@ -1,13 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
-  Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, ArrowLeft, Check, X,
+  Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, Check, X,
   AlertCircle, WifiOff, Swords, Crosshair, Cpu, Zap, Ghost, Globe, Star,
   Timer as TimerIcon,
 } from "lucide-react";
+
 import { generateTrivia, type TriviaQuestion } from "@/lib/trivia.functions";
 
 export const Route = createFileRoute("/trivia")({
@@ -201,16 +202,14 @@ function TriviaPage() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="max-w-4xl mx-auto w-full px-6 py-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center btn-hero">
             <Gamepad2 className="w-5 h-5" />
           </div>
-          <span className="font-display font-bold text-lg tracking-tight">Qual Jogo Jogar?</span>
-        </Link>
-        <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
-          <Link to="/"><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Link>
-        </Button>
+          <span className="font-display font-bold text-lg tracking-tight">Trivia de Games</span>
+        </div>
       </header>
+
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 pb-16">
         <div className="text-center mb-8 animate-fade-up">
@@ -453,9 +452,7 @@ function TriviaPage() {
               <Button onClick={backToSetup} variant="ghost" className="rounded-full h-12 px-6">
                 Mudar categoria
               </Button>
-              <Button asChild variant="ghost">
-                <Link to="/">Ver recomendações</Link>
-              </Button>
+
             </div>
           </div>
         )}
