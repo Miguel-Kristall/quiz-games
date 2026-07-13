@@ -232,13 +232,29 @@ function TriviaPage() {
   }
 
   function next() {
+    const isLast = current + 1 >= questions.length;
     setSelected(null);
-    if (current + 1 >= questions.length) {
+    if (isLast) {
+      const finalScore = score;
+      const finalPoints = points;
+      const total = questions.length;
+      const entry: HistoryEntry = {
+        date: Date.now(),
+        category: playedCategory,
+        difficulty: playedDifficulty,
+        score: finalScore,
+        total,
+        points: finalPoints,
+        maxPoints: total * pointsPerCorrect,
+      };
+      saveHistoryEntry(entry);
+      setHistory(loadHistory());
       setPhase("finished");
     } else {
       setCurrent((c) => c + 1);
     }
   }
+
 
   function backToSetup() {
     setPhase("setup");
