@@ -51,8 +51,20 @@ type ErrorKind = "timeout" | "error" | "empty";
 const TIMEOUT_SENTINEL = "__timeout__";
 
 const STORAGE_KEY = "trivia_asked_questions";
+const HISTORY_KEY = "trivia_history";
 const MAX_STORED = 200;
+const MAX_HISTORY = 10;
 const REQUEST_TIMEOUT_MS = 45000;
+
+export interface HistoryEntry {
+  date: number;
+  category: string;
+  difficulty: string;
+  score: number;
+  total: number;
+  points: number;
+  maxPoints: number;
+}
 
 function loadAsked(): string[] {
   if (typeof window === "undefined") return [];
@@ -76,6 +88,48 @@ function saveAsked(list: string[]) {
   }
 }
 
+function loadHistory(): HistoryEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryEntry(entry: HistoryEntry) {
+  if (typeof window === "undefined") return;
+  try {
+    const list = [entry, ...loadHistory()].slice(0, MAX_HISTORY);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+}
+
+function clearHistory() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function formatDate(ts: number): string {
+  try {
+    return new Date(ts).toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+
 function TriviaPage() {
   const gen = useServerFn(generateTrivia);
   const [phase, setPhase] = useState<Phase>("setup");
@@ -92,8 +146,13 @@ function TriviaPage() {
   const [errorKind, setErrorKind] = useState<ErrorKind>("error");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const abortRef = useRef<AbortController | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => {
+    setHistory(loadHistory());
+    return () => abortRef.current?.abort();
+  }, []);
+
 
   // Per-question countdown timer
   const questionSeconds = TIMER_PER_DIFFICULTY[playedDifficulty] ?? 20;
@@ -173,13 +232,29 @@ function TriviaPage() {
   }
 
   function next() {
+    const isLast = current + 1 >= questions.length;
     setSelected(null);
-    if (current + 1 >= questions.length) {
+    if (isLast) {
+      const finalScore = score;
+      const finalPoints = points;
+      const total = questions.length;
+      const entry: HistoryEntry = {
+        date: Date.now(),
+        category: playedCategory,
+        difficulty: playedDifficulty,
+        score: finalScore,
+        total,
+        points: finalPoints,
+        maxPoints: total * pointsPerCorrect,
+      };
+      saveHistoryEntry(entry);
+      setHistory(loadHistory());
       setPhase("finished");
     } else {
       setCurrent((c) => c + 1);
     }
   }
+
 
   function backToSetup() {
     setPhase("setup");
@@ -273,8 +348,49 @@ function TriviaPage() {
                 Começar quiz <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
             </div>
+
+            {history.length > 0 && (
+              <div className="card-glow rounded-2xl p-6 md:p-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-primary" /> Últimos resultados
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Salvos neste navegador.</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => { clearHistory(); setHistory([]); }}
+                  >
+                    Limpar
+                  </Button>
+                </div>
+                <ul className="divide-y divide-border/50">
+                  {history.map((h, i) => {
+                    const cat = CATEGORIES.find((c) => c.id === h.category)?.label ?? h.category;
+                    const diff = DIFFICULTIES.find((d) => d.id === h.difficulty)?.label ?? h.difficulty;
+                    const pct = h.total ? Math.round((h.score / h.total) * 100) : 0;
+                    return (
+                      <li key={i} className="flex items-center justify-between gap-3 py-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold truncate">{cat} · {diff}</div>
+                          <div className="text-xs text-muted-foreground">{formatDate(h.date)}</div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-sm font-bold">{h.score}/{h.total} <span className="text-muted-foreground font-normal">({pct}%)</span></div>
+                          <div className="text-xs text-primary">{h.points} pts</div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
         )}
+
 
         {phase === "loading" && (
           <div className="py-10 animate-fade-up">
