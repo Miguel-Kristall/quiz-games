@@ -348,8 +348,49 @@ function TriviaPage() {
                 Começar quiz <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
             </div>
+
+            {history.length > 0 && (
+              <div className="card-glow rounded-2xl p-6 md:p-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-primary" /> Últimos resultados
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Salvos neste navegador.</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => { clearHistory(); setHistory([]); }}
+                  >
+                    Limpar
+                  </Button>
+                </div>
+                <ul className="divide-y divide-border/50">
+                  {history.map((h, i) => {
+                    const cat = CATEGORIES.find((c) => c.id === h.category)?.label ?? h.category;
+                    const diff = DIFFICULTIES.find((d) => d.id === h.difficulty)?.label ?? h.difficulty;
+                    const pct = h.total ? Math.round((h.score / h.total) * 100) : 0;
+                    return (
+                      <li key={i} className="flex items-center justify-between gap-3 py-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold truncate">{cat} · {diff}</div>
+                          <div className="text-xs text-muted-foreground">{formatDate(h.date)}</div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-sm font-bold">{h.score}/{h.total} <span className="text-muted-foreground font-normal">({pct}%)</span></div>
+                          <div className="text-xs text-primary">{h.points} pts</div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
         )}
+
 
         {phase === "loading" && (
           <div className="py-10 animate-fade-up">
