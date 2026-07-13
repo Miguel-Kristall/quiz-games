@@ -1,13 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
-  Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, ArrowLeft, Check, X,
+  Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, Check, X,
   AlertCircle, WifiOff, Swords, Crosshair, Cpu, Zap, Ghost, Globe, Star,
   Timer as TimerIcon,
 } from "lucide-react";
+
 import { generateTrivia, type TriviaQuestion } from "@/lib/trivia.functions";
 
 export const Route = createFileRoute("/trivia")({
