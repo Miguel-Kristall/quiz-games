@@ -51,8 +51,20 @@ type ErrorKind = "timeout" | "error" | "empty";
 const TIMEOUT_SENTINEL = "__timeout__";
 
 const STORAGE_KEY = "trivia_asked_questions";
+const HISTORY_KEY = "trivia_history";
 const MAX_STORED = 200;
+const MAX_HISTORY = 10;
 const REQUEST_TIMEOUT_MS = 45000;
+
+export interface HistoryEntry {
+  date: number;
+  category: string;
+  difficulty: string;
+  score: number;
+  total: number;
+  points: number;
+  maxPoints: number;
+}
 
 function loadAsked(): string[] {
   if (typeof window === "undefined") return [];
@@ -75,6 +87,48 @@ function saveAsked(list: string[]) {
     // ignore
   }
 }
+
+function loadHistory(): HistoryEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryEntry(entry: HistoryEntry) {
+  if (typeof window === "undefined") return;
+  try {
+    const list = [entry, ...loadHistory()].slice(0, MAX_HISTORY);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+}
+
+function clearHistory() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function formatDate(ts: number): string {
+  try {
+    return new Date(ts).toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 
 function TriviaPage() {
   const gen = useServerFn(generateTrivia);
