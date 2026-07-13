@@ -146,8 +146,13 @@ function TriviaPage() {
   const [errorKind, setErrorKind] = useState<ErrorKind>("error");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const abortRef = useRef<AbortController | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => {
+    setHistory(loadHistory());
+    return () => abortRef.current?.abort();
+  }, []);
+
 
   // Per-question countdown timer
   const questionSeconds = TIMER_PER_DIFFICULTY[playedDifficulty] ?? 20;
