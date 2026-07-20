@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -6,12 +6,14 @@ import { Progress } from "@/components/ui/progress";
 import {
   Gamepad2, Sparkles, RotateCcw, ArrowRight, Trophy, Check, X,
   AlertCircle, WifiOff, Swords, Crosshair, Cpu, Zap, Ghost, Globe, Star,
-  Timer as TimerIcon,
+  Timer as TimerIcon, LogOut, User as UserIcon,
 } from "lucide-react";
 
 import { generateTrivia, type TriviaQuestion } from "@/lib/trivia.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 
-export const Route = createFileRoute("/trivia")({
+export const Route = createFileRoute("/_authenticated/trivia")({
   head: () => ({
     meta: [
       { title: "Trivia de Games — Qual Jogo Jogar?" },
@@ -51,12 +53,12 @@ type ErrorKind = "timeout" | "error" | "empty";
 const TIMEOUT_SENTINEL = "__timeout__";
 
 const STORAGE_KEY = "trivia_asked_questions";
-const HISTORY_KEY = "trivia_history";
 const MAX_STORED = 200;
 const MAX_HISTORY = 10;
 const REQUEST_TIMEOUT_MS = 45000;
 
-export interface HistoryEntry {
+interface HistoryEntry {
+  id: string;
   date: number;
   category: string;
   difficulty: string;
@@ -88,37 +90,6 @@ function saveAsked(list: string[]) {
   }
 }
 
-function loadHistory(): HistoryEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistoryEntry(entry: HistoryEntry) {
-  if (typeof window === "undefined") return;
-  try {
-    const list = [entry, ...loadHistory()].slice(0, MAX_HISTORY);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-}
-
-function clearHistory() {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(HISTORY_KEY);
-  } catch {
-    // ignore
-  }
-}
-
 function formatDate(ts: number): string {
   try {
     return new Date(ts).toLocaleString("pt-BR", {
@@ -129,9 +100,29 @@ function formatDate(ts: number): string {
   }
 }
 
+async function fetchHistory(): Promise<HistoryEntry[]> {
+  const { data, error } = await supabase
+    .from("trivia_history")
+    .select("id, category, difficulty, score, total, points, max_points, created_at")
+    .order("created_at", { ascending: false })
+    .limit(MAX_HISTORY);
+  if (error || !data) return [];
+  return data.map((r) => ({
+    id: r.id,
+    date: new Date(r.created_at).getTime(),
+    category: r.category,
+    difficulty: r.difficulty,
+    score: r.score,
+    total: r.total,
+    points: r.points,
+    maxPoints: r.max_points,
+  }));
+}
 
 function TriviaPage() {
   const gen = useServerFn(generateTrivia);
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("setup");
   const [category, setCategory] = useState<string>("todas");
   const [difficulty, setDifficulty] = useState<string>("medio");
@@ -147,14 +138,22 @@ function TriviaPage() {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [displayName, setDisplayName] = useState<string>("");
 
   useEffect(() => {
-    setHistory(loadHistory());
+    fetchHistory().then(setHistory);
     return () => abortRef.current?.abort();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    const metaName = (user.user_metadata as { name?: string } | null)?.name;
+    if (metaName) { setDisplayName(metaName); return; }
+    supabase.from("profiles").select("name").eq("id", user.id).maybeSingle().then(({ data }) => {
+      setDisplayName(data?.name || user.email || "");
+    });
+  }, [user]);
 
-  // Per-question countdown timer
   const questionSeconds = TIMER_PER_DIFFICULTY[playedDifficulty] ?? 20;
   const pointsPerCorrect = POINTS_PER_DIFFICULTY[playedDifficulty] ?? 20;
 
@@ -172,6 +171,11 @@ function TriviaPage() {
     const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => clearTimeout(id);
   }, [phase, selected, timeLeft]);
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", replace: true });
+  }
 
   async function startQuiz() {
     setPhase("loading");
@@ -231,30 +235,36 @@ function TriviaPage() {
     }
   }
 
-  function next() {
+  async function next() {
     const isLast = current + 1 >= questions.length;
     setSelected(null);
     if (isLast) {
       const finalScore = score;
       const finalPoints = points;
       const total = questions.length;
-      const entry: HistoryEntry = {
-        date: Date.now(),
-        category: playedCategory,
-        difficulty: playedDifficulty,
-        score: finalScore,
-        total,
-        points: finalPoints,
-        maxPoints: total * pointsPerCorrect,
-      };
-      saveHistoryEntry(entry);
-      setHistory(loadHistory());
+      if (user) {
+        await supabase.from("trivia_history").insert({
+          user_id: user.id,
+          category: playedCategory,
+          difficulty: playedDifficulty,
+          score: finalScore,
+          total,
+          points: finalPoints,
+          max_points: total * pointsPerCorrect,
+        });
+        fetchHistory().then(setHistory);
+      }
       setPhase("finished");
     } else {
       setCurrent((c) => c + 1);
     }
   }
 
+  async function handleClearHistory() {
+    if (!user) return;
+    await supabase.from("trivia_history").delete().eq("user_id", user.id);
+    setHistory([]);
+  }
 
   function backToSetup() {
     setPhase("setup");
@@ -276,15 +286,30 @@ function TriviaPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="max-w-4xl mx-auto w-full px-6 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center btn-hero">
+      <header className="max-w-4xl mx-auto w-full px-6 py-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center btn-hero shrink-0">
             <Gamepad2 className="w-5 h-5" />
           </div>
-          <span className="font-display font-bold text-lg tracking-tight">Trivia de Games</span>
+          <span className="font-display font-bold text-lg tracking-tight truncate">Trivia de Games</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground max-w-[180px] truncate">
+            <UserIcon className="w-4 h-4 text-primary shrink-0" />
+            <span className="truncate">{displayName || user?.email}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSignOut}
+            className="text-muted-foreground hover:text-foreground"
+            title="Sair"
+          >
+            <LogOut className="w-4 h-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Sair</span>
+          </Button>
         </div>
       </header>
-
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 pb-16">
         <div className="text-center mb-8 animate-fade-up">
@@ -354,26 +379,26 @@ function TriviaPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-lg font-bold flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-primary" /> Últimos resultados
+                      <Trophy className="w-4 h-4 text-primary" /> Seus recordes
                     </h2>
-                    <p className="text-sm text-muted-foreground">Salvos neste navegador.</p>
+                    <p className="text-sm text-muted-foreground">Salvos na sua conta.</p>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => { clearHistory(); setHistory([]); }}
+                    onClick={handleClearHistory}
                   >
                     Limpar
                   </Button>
                 </div>
                 <ul className="divide-y divide-border/50">
-                  {history.map((h, i) => {
+                  {history.map((h) => {
                     const cat = CATEGORIES.find((c) => c.id === h.category)?.label ?? h.category;
                     const diff = DIFFICULTIES.find((d) => d.id === h.difficulty)?.label ?? h.difficulty;
                     const pct = h.total ? Math.round((h.score / h.total) * 100) : 0;
                     return (
-                      <li key={i} className="flex items-center justify-between gap-3 py-3">
+                      <li key={h.id} className="flex items-center justify-between gap-3 py-3">
                         <div className="min-w-0">
                           <div className="text-sm font-semibold truncate">{cat} · {diff}</div>
                           <div className="text-xs text-muted-foreground">{formatDate(h.date)}</div>
@@ -390,7 +415,6 @@ function TriviaPage() {
             )}
           </div>
         )}
-
 
         {phase === "loading" && (
           <div className="py-10 animate-fade-up">
@@ -568,7 +592,6 @@ function TriviaPage() {
               <Button onClick={backToSetup} variant="ghost" className="rounded-full h-12 px-6">
                 Mudar categoria
               </Button>
-
             </div>
           </div>
         )}
